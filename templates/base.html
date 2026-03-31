@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en" data-theme="light">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <meta name="description" content="Smart College Event Management System – Discover, register, and manage college events effortlessly.">
+    <title>{% block title %}Smart Event Manager{% endblock %}</title>
+
+    <!-- Google Fonts -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800;900&family=Inter:wght@400;500;600&display=swap" rel="stylesheet">
+
+    <!-- Font Awesome Icons -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.5.0/css/all.min.css" crossorigin="anonymous">
+
+    <!-- Chart.js -->
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.1/dist/chart.umd.min.js"></script>
+
+    <!-- App Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <!-- UI Overhaul Stylesheet -->
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/overhaul.css') }}">
+    <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
+</head>
+<body>
+    <!-- Scroll Progress Bar -->
+    <div id="scroll-progress-bar"></div>
+    
+    <!-- Particles Canvas -->
+    <canvas id="particles-canvas"></canvas>
+
+    <!-- ═══ Navbar ═══════════════════════════════════════════ -->
+    <nav class="navbar" id="mainNavbar">
+        <div class="navbar-container">
+            <a href="{{ url_for('index') }}" class="navbar-brand">
+                <div class="brand-icon">🎓</div>
+                <span>EventorHub</span>
+            </a>
+
+            <ul class="navbar-links" id="navLinks">
+                <li><a href="{{ url_for('index') }}" class="{% if request.endpoint == 'index' %}active{% endif %}">Home</a></li>
+                <li><a href="{{ url_for('events') }}" class="{% if request.endpoint == 'events' %}active{% endif %}">Events</a></li>
+
+                {% if logged_in and user_role == 'student' %}
+                    <li><a href="{{ url_for('profile') }}" class="{% if request.endpoint == 'profile' %}active{% endif %}">Profile</a></li>
+                    <li><a href="{{ url_for('logout') }}" class="btn-nav-outline">Logout</a></li>
+                {% elif logged_in and user_role == 'admin' %}
+                    <li><a href="{{ url_for('admin_dashboard') }}" class="{% if request.endpoint == 'admin_dashboard' %}active{% endif %}">Dashboard</a></li>
+                    <li><a href="{{ url_for('manage_events') }}" class="{% if request.endpoint == 'manage_events' %}active{% endif %}">Manage</a></li>
+                    <li><a href="{{ url_for('add_event') }}" class="{% if request.endpoint == 'add_event' %}active{% endif %}">Add Event</a></li>
+                    <li><a href="{{ url_for('logout') }}" class="btn-nav-outline">Logout</a></li>
+                {% else %}
+                    <li><a href="{{ url_for('login') }}" class="{% if request.endpoint == 'login' %}active{% endif %}">Login</a></li>
+                    <li><a href="{{ url_for('signup') }}" class="btn-nav">Sign Up</a></li>
+                {% endif %}
+            </ul>
+
+            <!-- Dark Mode Toggle -->
+            <button class="dark-toggle" id="darkToggle" title="Toggle dark mode" aria-label="Toggle dark mode">🌙</button>
+
+            <button class="hamburger" id="hamburgerBtn" aria-label="Toggle navigation">
+                <span></span>
+                <span></span>
+                <span></span>
+            </button>
+        </div>
+    </nav>
+
+    <!-- Mobile Overlay -->
+    <div class="mobile-overlay" id="mobileOverlay"></div>
+
+    <!-- ═══ Flash Messages ═══════════════════════════════════ -->
+    {% with messages = get_flashed_messages(with_categories=true) %}
+        {% if messages %}
+            <div class="flash-container" id="flashContainer">
+                {% for category, message in messages %}
+                    <div class="flash-message flash-{{ category }}" role="alert">
+                        {% if category == 'success' %}✅
+                        {% elif category == 'danger' %}❌
+                        {% elif category == 'warning' %}⚠️
+                        {% else %}ℹ️{% endif %}
+                        <span>{{ message }}</span>
+                        <span class="flash-close">&times;</span>
+                    </div>
+                {% endfor %}
+            </div>
+        {% endif %}
+    {% endwith %}
+
+    <!-- ═══ Main Content ═════════════════════════════════════ -->
+    <main class="main-content">
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- ═══ Footer ═══════════════════════════════════════════ -->
+    <footer class="footer">
+        <div class="footer-content">
+            <ul class="footer-links">
+                <li><a href="{{ url_for('index') }}">Home</a></li>
+                <li><a href="{{ url_for('events') }}">Events</a></li>
+                <li><a href="{{ url_for('login') }}">Student Login</a></li>
+                <li><a href="{{ url_for('admin_login') }}">Admin Login</a></li>
+            </ul>
+            <p>&copy; 2026 EventorHub – Smart College Event Management. All rights reserved.</p>
+            <p style="margin-top: 6px; font-weight: 600; color: var(--primary-light);">Created by Prasanna N</p>
+        </div>
+    </footer>
+
+    <!-- Scroll to Top -->
+    <button id="scroll-to-top" aria-label="Scroll to top" title="Back to top">
+        <i class="fas fa-angles-up"></i>
+    </button>
+
+    <!-- App JavaScript -->
+    <script src="{{ url_for('static', filename='js/script.js') }}"></script>
+    <script src="{{ url_for('static', filename='js/overhaul.js') }}"></script>
+
+    <!-- Dark Mode Script (inline for instant apply before paint) -->
+    <script>
+        (function() {
+            var saved = localStorage.getItem('eventorhub-theme') || 'light';
+            document.documentElement.setAttribute('data-theme', saved);
+            var btn = document.getElementById('darkToggle');
+            if (btn) btn.textContent = saved === 'dark' ? '☀️' : '🌙';
+        })();
+
+        document.addEventListener('DOMContentLoaded', function () {
+            var toggle = document.getElementById('darkToggle');
+            if (!toggle) return;
+            toggle.addEventListener('click', function () {
+                var html = document.documentElement;
+                var current = html.getAttribute('data-theme') === 'dark' ? 'light' : 'dark';
+                html.setAttribute('data-theme', current);
+                localStorage.setItem('eventorhub-theme', current);
+                toggle.textContent = current === 'dark' ? '☀️' : '🌙';
+                toggle.style.transform = 'rotate(360deg)';
+                setTimeout(function(){ toggle.style.transform = ''; }, 400);
+            });
+        });
+    </script>
+</body>
+</html>

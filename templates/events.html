@@ -1,0 +1,340 @@
+{% extends 'base.html' %}
+{% block title %}Events – EventorHub{% endblock %}
+
+{% block content %}
+<!-- Page Header -->
+<div class="page-header">
+    <div class="container">
+        <div class="page-header-content">
+            <div>
+                <h1>{% if my_registrations is defined and my_registrations %}My Registrations{% else %}Browse Events{% endif %}</h1>
+                <p>{% if my_registrations is defined and my_registrations %}Events you've registered for{% else %}Discover and register for exciting campus events{% endif %}</p>
+            </div>
+            {% if logged_in and user_role == 'student' %}
+                {% if my_registrations is defined and my_registrations %}
+                    <a href="{{ url_for('events') }}" class="btn btn-ghost">← All Events</a>
+                {% else %}
+                    <a href="{{ url_for('profile') }}" class="btn btn-ghost">📋 My Registrations</a>
+                {% endif %}
+            {% endif %}
+        </div>
+    </div>
+</div>
+
+<section class="page-section">
+    <div class="container">
+        {% if events %}
+            <!-- Filter & Search Bar -->
+            <div class="events-filter-bar fade-in">
+                <div class="search-box">
+                    <i class="fas fa-search"></i>
+                    <input type="text" id="eventSearch" placeholder="Search events or venues...">
+                </div>
+                <div class="filter-pills">
+                    <button class="filter-pill active" data-filter="all">All</button>
+                    <button class="filter-pill" data-filter="free">Free</button>
+                    <button class="filter-pill" data-filter="paid">Paid</button>
+                    <button class="filter-pill" data-filter="team">Team</button>
+                </div>
+            </div>
+
+            <div class="events-grid">
+                {% for event in events %}
+                    <div class="event-card fade-in" 
+                         data-name="{{ event.event_name|lower }}"
+                         data-venue="{{ event.venue|default('')|lower }}"
+                         data-paid="{% if event.is_paid %}true{% else %}false{% endif %}"
+                         data-team="{% if event.is_team_event %}true{% else %}false{% endif %}">
+                        <!-- Event Poster -->
+                        {% if event.poster %}
+                            <img src="{{ url_for('static', filename='images/' + event.poster) }}"
+                                 alt="{{ event.event_name }}" class="event-card-image">
+                        {% else %}
+                            <div class="event-card-image default-poster">🎪</div>
+                        {% endif %}
+
+                        <div class="event-card-body">
+                            <!-- Badges -->
+                            <div class="event-card-badges">
+                                {% if event.is_paid %}
+                                    <span class="badge badge-paid">💰 ₹{{ event.price }}</span>
+                                {% else %}
+                                    <span class="badge badge-free">✨ Free</span>
+                                {% endif %}
+
+                                {% if event.limit_enabled %}
+                                    {% set count = reg_counts.get(event.event_id, 0) if reg_counts else 0 %}
+                                    {% if count >= event.max_participants %}
+                                        <span class="badge badge-full">🚫 Full</span>
+                                    {% else %}
+                                        <span class="badge badge-open">👥 {{ count }}/{{ event.max_participants }}</span>
+                                    {% endif %}
+                                {% endif %}
+
+                                {% if event.event_id in registered %}
+                                    {% if event.is_paid and reg_statuses is defined and reg_statuses.get(event.event_id) == 'pending' %}
+                                        <span class="badge badge-paid">⏳ Payment Pending</span>
+                                    {% elif event.is_paid and reg_statuses is defined and reg_statuses.get(event.event_id) == 'rejected' %}
+                                        <span class="badge badge-full">❌ Payment Rejected</span>
+                                    {% else %}
+                                        <span class="badge badge-registered">✅ Registered</span>
+                                    {% endif %}
+                                {% endif %}
+                            </div>
+
+                            <!-- Event Info -->
+                            <h3 class="event-card-title">{{ event.event_name }}</h3>
+
+                            {% if event.description %}
+                                <p class="event-card-desc">{{ event.description }}</p>
+                            {% endif %}
+
+                            <div class="event-card-meta">
+                                {% if event.date %}
+                                    <div class="meta-item">
+                                        <span class="meta-icon">📅</span>
+                                        <span>{{ event.date }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if event.time %}
+                                    <div class="meta-item">
+                                        <span class="meta-icon">🕐</span>
+                                        <span>{{ event.time }}</span>
+                                    </div>
+                                {% endif %}
+                                {% if event.venue %}
+                                    <div class="meta-item">
+                                        <span class="meta-icon">📍</span>
+                                        <span>{{ event.venue }}</span>
+                                    </div>
+                                {% endif %}
+                            </div>
+
+                            <!-- Card Footer -->
+                            <div class="event-card-footer">
+                                {% if event.is_paid %}
+                                    <span class="event-price">₹{{ event.price }}</span>
+                                {% else %}
+                                    <span class="event-price free">Free</span>
+                                {% endif %}
+
+                                {% if logged_in and user_role == 'student' %}
+                                    {% if event.event_id in registered %}
+                                        {% if event.is_paid and reg_statuses is defined and reg_statuses.get(event.event_id) == 'pending' %}
+                                            <span class="btn btn-sm" style="background: #fef3c7; color: #92400e; cursor: default;">
+                                                ⏳ Awaiting Verification
+                                            </span>
+                                        {% elif event.is_paid and reg_statuses is defined and reg_statuses.get(event.event_id) == 'rejected' %}
+                                            <span class="btn btn-sm" style="background: var(--danger-light); color: var(--danger); cursor: default;">
+                                                ❌ Payment Rejected
+                                            </span>
+                                        {% else %}
+                                            <span class="btn btn-sm" style="background: var(--success-light); color: var(--success); cursor: default;">
+                                                ✅ Registered
+                                            </span>
+                                        {% endif %}
+                                    {% elif event.limit_enabled and reg_counts.get(event.event_id, 0) >= event.max_participants %}
+                                        <span class="btn btn-sm" style="background: var(--danger-light); color: var(--danger); cursor: default;">
+                                            🚫 Registration Full
+                                        </span>
+                                    {% else %}
+                                        <button class="btn btn-primary btn-sm event-detail-trigger"
+                                                data-modal="modal-{{ event.event_id }}">
+                                            Register →
+                                        </button>
+                                    {% endif %}
+                                {% elif not logged_in %}
+                                    <a href="{{ url_for('login') }}" class="btn btn-primary btn-sm">Login to Register</a>
+                                {% endif %}
+                            </div>
+                        </div>
+                    </div>
+
+                    <!-- ═══ Registration Modal ═══ -->
+                    {% if logged_in and user_role == 'student' and event.event_id not in registered %}
+                    <div class="modal-overlay" id="modal-{{ event.event_id }}">
+                        <div class="modal">
+                            <div class="modal-header">
+                                <h3>Register for Event</h3>
+                                <button class="modal-close">&times;</button>
+                            </div>
+                            <div class="modal-body">
+                                <h3 style="margin-bottom: 16px; color: var(--primary);">{{ event.event_name }}</h3>
+
+                                {% if event.description %}
+                                    <p style="color: var(--text-secondary); margin-bottom: 16px;">{{ event.description }}</p>
+                                {% endif %}
+
+                                <div style="display: flex; flex-direction: column; gap: 8px; margin-bottom: 20px;">
+                                    {% if event.date %}
+                                        <div class="meta-item">
+                                            <span class="meta-icon">📅</span>
+                                            <strong>Date:</strong>&nbsp; {{ event.date }}
+                                        </div>
+                                    {% endif %}
+                                    {% if event.time %}
+                                        <div class="meta-item">
+                                            <span class="meta-icon">🕐</span>
+                                            <strong>Time:</strong>&nbsp; {{ event.time }}
+                                        </div>
+                                    {% endif %}
+                                    {% if event.venue %}
+                                        <div class="meta-item">
+                                            <span class="meta-icon">📍</span>
+                                            <strong>Venue:</strong>&nbsp; {{ event.venue }}
+                                        </div>
+                                    {% endif %}
+                                </div>
+
+                                <form method="POST" action="{{ url_for('register_event', event_id=event.event_id) }}"
+                                      class="register-form" data-event-name="{{ event.event_name }}"
+                                      data-is-paid="{{ event.is_paid }}">
+
+                                    <!-- Team Event Fields -->
+                                    {% if event.is_team_event %}
+                                        <div style="background: #f8fafc; border: 1px solid #cbd5e1; border-radius: 8px; padding: 16px; margin-bottom: 20px;">
+                                            <h4 style="margin-bottom: 12px; color: #334155;">👥 Team Registration (Max: {{ event.team_size }})</h4>
+                                            <div class="form-group">
+                                                <label style="font-size: 0.85rem;">Team Name *</label>
+                                                <input type="text" name="team_name" class="form-control" placeholder="Enter team name" required>
+                                            </div>
+                                            <div class="form-group" style="margin-bottom: 0;">
+                                                <label style="font-size: 0.85rem;">Team Members *</label>
+                                                <input type="text" name="team_members" class="form-control" placeholder="Jane, Alice, Bob..." required>
+                                                <p style="font-size: 0.75rem; color: var(--text-muted); margin-top: 4px;">Comma-separated names</p>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+
+                                    <!-- Payment Section for Paid Events -->
+                                    {% if event.is_paid %}
+                                        <input type="hidden" name="razorpay_payment_id" class="rzp-payment-id">
+                                        <input type="hidden" name="razorpay_order_id" class="rzp-order-id">
+                                        <input type="hidden" name="razorpay_signature" class="rzp-signature">
+
+                                        <div class="payment-section">
+                                            <h4>💳 Secure Payment – ₹{{ event.price }}</h4>
+                                            <p style="font-size: 0.88rem; color: #92400e; margin-bottom: 8px;">
+                                                You will be securely redirected to Razorpay to complete your payment (UPI, Card, NetBanking).
+                                            </p>
+                                            <div style="background: #eff6ff; border-radius: 8px; padding: 12px 14px; margin-top: 12px; border-left: 3px solid #3b82f6;">
+                                                <p style="font-size: 0.82rem; color: #1e40af; margin: 0;">⚡ Payment is verified automatically. Your registration will be confirmed instantly.</p>
+                                            </div>
+                                        </div>
+                                    {% endif %}
+
+                                    <div class="modal-footer" style="padding: 20px 0 0; border: none;">
+                                        <button type="button" class="btn btn-secondary modal-close">Cancel</button>
+                                        <button type="submit" class="btn btn-success">
+                                            ✅ Confirm Registration
+                                        </button>
+                                    </div>
+                                </form>
+                            </div>
+                        </div>
+                    </div>
+                    {% endif %}
+                {% endfor %}
+            </div>
+        {% else %}
+            <div class="empty-state">
+                <div class="empty-icon">🎭</div>
+                <h3>No Events Found</h3>
+                <p>There are no events available right now. Check back later!</p>
+                <a href="{{ url_for('index') }}" class="btn btn-primary">Go Home</a>
+            </div>
+        {% endif %}
+    </div>
+</section>
+
+<!-- Razorpay Checkout JS -->
+<script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    document.querySelectorAll('.register-form').forEach(form => {
+        form.addEventListener('submit', async function(e) {
+            const isPaid = this.dataset.isPaid === '1';
+            const eventName = this.dataset.eventName;
+            
+            // Allow default submission if signature exists (means razorpay succeeded)
+            if (isPaid && this.querySelector('.rzp-signature').value !== '') {
+                return; 
+            }
+            
+            e.preventDefault();
+            
+            if (!confirm('Are you sure you want to register for "' + eventName + '"?')) {
+                return;
+            }
+
+            if (!isPaid) {
+                // Free event, submit normally
+                this.submit();
+                return;
+            }
+
+            // --- Razorpay Payment Flow ---
+            const submitBtn = this.querySelector('button[type="submit"]');
+            const originalText = submitBtn.innerHTML;
+            submitBtn.innerHTML = 'Processing Please Wait...';
+            submitBtn.disabled = true;
+
+            const eventId = this.action.split('/').pop();
+
+            try {
+                // 1. Create Order via API
+                const resp = await fetch('/api/create-razorpay-order', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ event_id: eventId })
+                });
+                
+                const data = await resp.json();
+                
+                if (!resp.ok) {
+                    throw new Error(data.error || 'Failed to initialize payment.');
+                }
+
+                // 2. Open Razorpay Checkout
+                const options = {
+                    "key": data.key,
+                    "amount": data.amount,
+                    "currency": "INR",
+                    "name": "Event Management",
+                    "description": data.event_name,
+                    "order_id": data.order_id,
+                    "prefill": {
+                        "name": data.user_name,
+                        "email": data.user_email
+                    },
+                    "theme": {
+                        "color": "#4f46e5"
+                    },
+                    "handler": function (response) {
+                        // 3. On Success, set hidden fields and submit form
+                        form.querySelector('.rzp-payment-id').value = response.razorpay_payment_id;
+                        form.querySelector('.rzp-order-id').value = response.razorpay_order_id;
+                        form.querySelector('.rzp-signature').value = response.razorpay_signature;
+                        submitBtn.innerHTML = 'Verifying...';
+                        form.submit();
+                    }
+                };
+                
+                const rzp = new Razorpay(options);
+                rzp.on('payment.failed', function (response){
+                    alert("Payment Failed: " + response.error.description);
+                    submitBtn.innerHTML = originalText;
+                    submitBtn.disabled = false;
+                });
+                rzp.open();
+                
+            } catch (err) {
+                alert(err.message);
+                submitBtn.innerHTML = originalText;
+                submitBtn.disabled = false;
+            }
+        });
+    });
+});
+</script>
+{% endblock %}

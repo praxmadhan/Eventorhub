@@ -1,0 +1,224 @@
+/* 
+ * UI Overview Additions
+ * Includes Particle, Scroll, Stats, Ribbon and Glow effects.
+ */
+
+/* Scroll Progress Bar */
+#scroll-progress-bar {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 3px;
+    background: linear-gradient(90deg, var(--primary), var(--accent), var(--secondary));
+    width: 0%;
+    z-index: 9999;
+    box-shadow: 0 0 10px var(--primary-glow);
+    transition: width 0.1s ease-out;
+}
+
+/* Particle Canvas */
+#particles-canvas {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    z-index: 0;
+    pointer-events: none;
+}
+.hero { position: relative; z-index: 1; }
+
+/* Typing Effect */
+.type-cursor {
+    display: inline-block;
+    width: 3px;
+    background-color: white;
+    margin-left: 2px;
+    animation: blink 1s step-end infinite;
+}
+@keyframes blink { 50% { opacity: 0; } }
+
+/* Glow Effects */
+.nav-link.active {
+    text-shadow: 0 0 8px var(--primary-light);
+}
+.hero-badges .hero-badge {
+    transition: all 0.3s ease;
+}
+.hero-badges .hero-badge:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 0 15px rgba(255, 255, 255, 0.2);
+    background: rgba(255, 255, 255, 0.2);
+}
+
+/* Ripple Effect */
+.btn {
+    position: relative;
+    overflow: hidden;
+}
+.ripple {
+    position: absolute;
+    border-radius: 50%;
+    background: rgba(255, 255, 255, 0.4);
+    transform: scale(0);
+    animation: ripple-anim 0.6s linear;
+    pointer-events: none;
+}
+@keyframes ripple-anim {
+    to { transform: scale(4); opacity: 0; }
+}
+
+/* Scroll To Top Button */
+#scroll-to-top {
+    position: fixed;
+    bottom: -60px;
+    right: 24px;
+    width: 48px;
+    height: 48px;
+    border-radius: 50%;
+    background: var(--primary);
+    color: white;
+    border: none;
+    box-shadow: 0 4px 15px rgba(79, 70, 229, 0.4);
+    cursor: pointer;
+    z-index: 2000;
+    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-size: 1.2rem;
+}
+#scroll-to-top.visible {
+    bottom: 24px;
+}
+#scroll-to-top:hover {
+    background: var(--primary-dark);
+    transform: translateY(-3px);
+    box-shadow: 0 6px 20px rgba(79, 70, 229, 0.6);
+}
+
+/* Stats Strip */
+.stats-strip {
+    background: linear-gradient(135deg, var(--bg-card), var(--bg-body));
+    border-top: 1px solid var(--border-light);
+    border-bottom: 1px solid var(--border-light);
+    padding: 40px 0;
+    position: relative;
+    z-index: 5;
+    margin-bottom: 40px;
+}
+.stats-row {
+    display: flex;
+    justify-content: space-around;
+    flex-wrap: wrap;
+    gap: 20px;
+    text-align: center;
+}
+.stat-item {
+    flex: 1;
+    min-width: 150px;
+    padding: 20px;
+    background: var(--bg-card);
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    transition: var(--transition);
+    border: 1px solid var(--border-light);
+}
+.stat-item:hover {
+    transform: translateY(-5px);
+    box-shadow: var(--shadow-md);
+    border-color: var(--primary-glow);
+}
+.stat-item h3.counter {
+    font-size: 2.5rem;
+    font-weight: 800;
+    color: var(--primary);
+    margin-bottom: 5px;
+    background: linear-gradient(135deg, var(--primary), var(--accent));
+    -webkit-background-clip: text;
+    background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+.stat-item p {
+    font-size: 0.95rem;
+    color: var(--text-secondary);
+    font-weight: 600;
+}
+
+/* Filters & Search */
+.events-filter-bar {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 16px;
+    justify-content: space-between;
+    align-items: center;
+    background: var(--bg-card);
+    padding: 16px 20px;
+    border-radius: var(--radius-lg);
+    box-shadow: var(--shadow-sm);
+    border: 1px solid var(--border-light);
+    margin-bottom: 30px;
+}
+.search-box {
+    position: relative;
+    flex: 1;
+    min-width: 250px;
+}
+.search-box i {
+    position: absolute;
+    left: 14px;
+    top: 50%;
+    transform: translateY(-50%);
+    color: var(--text-muted);
+}
+.search-box input {
+    width: 100%;
+    padding: 12px 16px 12px 40px;
+    border: 1px solid var(--border);
+    border-radius: var(--radius-full);
+    outline: none;
+    transition: var(--transition);
+    background: var(--bg-body);
+}
+.search-box input:focus {
+    border-color: var(--primary);
+    box-shadow: 0 0 0 3px var(--primary-glow);
+    background: var(--bg-card);
+}
+.filter-pills {
+    display: flex;
+    gap: 8px;
+    flex-wrap: wrap;
+}
+.filter-pill {
+    padding: 8px 16px;
+    border-radius: var(--radius-full);
+    border: 1px solid var(--border);
+    background: var(--bg-body);
+    font-weight: 600;
+    color: var(--text-secondary);
+    cursor: pointer;
+    transition: var(--transition);
+}
+.filter-pill:hover,
+.filter-pill.active {
+    background: var(--primary);
+    color: white;
+    border-color: var(--primary);
+    box-shadow: 0 4px 10px var(--primary-glow);
+}
+
+/* Event Card Glassmorphism & Tilt */
+.event-card {
+    transition: transform 0.1s ease-out, box-shadow 0.3s ease;
+    transform-style: preserve-3d;
+}
+.event-card-body {
+    transform: translateZ(30px); /* 3D pop effect */
+}
+.event-card-image {
+    transition: transform 0.5s ease;
+}
+.event-card:hover .event-card-image {
+    transform: scale(1.05);
+}
