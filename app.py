@@ -27,9 +27,8 @@ from PIL import Image
 import razorpay
 from flask import send_from_directory
 
-@app.route('/sitemap.xml')
-def sitemap():
-    return send_from_directory('.', 'sitemap.xml')
+
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # App Configuration
@@ -299,6 +298,12 @@ def index():
     events = conn.execute('SELECT * FROM events ORDER BY date DESC').fetchall()
     conn.close()
     return render_template('index.html', events=events)
+
+
+@app.route('/sitemap.xml')
+def sitemap():
+    return send_from_directory('.', 'sitemap.xml')
+
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
