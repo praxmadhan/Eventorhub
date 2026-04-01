@@ -26,6 +26,10 @@ import pandas as pd
 import qrcode
 from PIL import Image
 import razorpay
+from flask import send_from_directory
+
+
+
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # App Configuration
@@ -351,6 +355,9 @@ def sitemap():
     response = make_response(sitemap_xml)
     response.headers['Content-Type'] = 'application/xml; charset=utf-8'
     return response
+@app.route('/sitemap.xml')
+def sitemap():
+    return send_from_directory('.', 'sitemap.xml')
 
 
 
