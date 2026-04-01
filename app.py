@@ -17,7 +17,7 @@ from io import BytesIO
 
 from flask import (
     Flask, render_template, request, redirect,
-    url_for, session, flash, jsonify, send_file, make_response
+    url_for, session, flash, jsonify, send_file
 )
 
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -304,61 +304,9 @@ def index():
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 # Sitemap
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-
-@app.route('/sitemap.xml')
-def sitemap():
-    """Generate and serve a sitemap.xml for search engine indexing."""
-    base_url = request.host_url.rstrip('/')
-
-    # Static routes to include in the sitemap
-    static_urls = [
-        {'loc': f'{base_url}/', 'priority': '1.0', 'changefreq': 'daily'},
-        {'loc': f'{base_url}/events', 'priority': '0.9', 'changefreq': 'daily'},
-        {'loc': f'{base_url}/login', 'priority': '0.5', 'changefreq': 'monthly'},
-        {'loc': f'{base_url}/signup', 'priority': '0.5', 'changefreq': 'monthly'},
-        {'loc': f'{base_url}/admin/login', 'priority': '0.3', 'changefreq': 'monthly'},
-        {'loc': f'{base_url}/admin/signup', 'priority': '0.3', 'changefreq': 'monthly'},
-    ]
-
-    # Dynamic event routes – one URL per event in the database
-    conn = get_db()
-    events = conn.execute('SELECT event_id, date FROM events ORDER BY date DESC').fetchall()
-    conn.close()
-
-    dynamic_urls = []
-    for event in events:
-        entry = {
-            'loc': f'{base_url}/event/{event["event_id"]}',
-            'priority': '0.8',
-            'changefreq': 'weekly',
-        }
-        if event['date']:
-            entry['lastmod'] = event['date']
-        dynamic_urls.append(entry)
-
-    all_urls = static_urls + dynamic_urls
-
-    # Build the XML document
-    xml_lines = ['<?xml version="1.0" encoding="UTF-8"?>']
-    xml_lines.append('<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">')
-    for url in all_urls:
-        xml_lines.append('  <url>')
-        xml_lines.append(f'    <loc>{url["loc"]}</loc>')
-        if 'lastmod' in url:
-            xml_lines.append(f'    <lastmod>{url["lastmod"]}</lastmod>')
-        xml_lines.append(f'    <changefreq>{url["changefreq"]}</changefreq>')
-        xml_lines.append(f'    <priority>{url["priority"]}</priority>')
-        xml_lines.append('  </url>')
-    xml_lines.append('</urlset>')
-
-    sitemap_xml = '\n'.join(xml_lines)
-    response = make_response(sitemap_xml)
-    response.headers['Content-Type'] = 'application/xml; charset=utf-8'
-    return response
 @app.route('/sitemap.xml')
 def sitemap():
     return send_from_directory('.', 'sitemap.xml')
-
 
 
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
