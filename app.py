@@ -384,12 +384,19 @@ def _storage_upload(data, path, content_type):
         data=data,
         headers={
             'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'apikey': SUPABASE_SERVICE_KEY,
             'Content-Type': content_type,
+            'cache-control': '3600',
             'x-upsert': 'true',
         },
         timeout=30,
     )
-    resp.raise_for_status()
+    if resp.status_code >= 400:
+        # Surface the real Supabase message so failures are diagnosable
+        raise RuntimeError(
+            f"Supabase Storage upload failed ({resp.status_code}) "
+            f"for bucket '{SUPABASE_BUCKET}': {resp.text}"
+        )
     return _storage_public_url(path)
 
 
