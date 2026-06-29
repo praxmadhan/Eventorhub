@@ -71,7 +71,7 @@
                 {% for event in events[:6] %}
                     <div class="event-card fade-in">
                         {% if event.poster %}
-                            <img src="{{ url_for('static', filename='images/' + event.poster) }}"
+                            <img src="{{ media_url(event.poster) }}"
                                  alt="{{ event.event_name }}" class="event-card-image">
                         {% else %}
                             <div class="event-card-image default-poster">🎪</div>

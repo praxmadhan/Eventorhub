@@ -26,6 +26,7 @@ import pandas as pd
 import qrcode
 from PIL import Image
 import razorpay
+import requests
 from flask import send_from_directory
 
 
@@ -82,11 +83,77 @@ def allowed_file(filename):
     return '.' in filename and filename.rsplit('.', 1)[1].lower() in ALLOWED_EXTENSIONS
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Database layer
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# Works with BOTH SQLite (local dev, no setup) and PostgreSQL (production).
+# If the DATABASE_URL environment variable is set (e.g. from Supabase / Neon /
+# Render Postgres), the app uses Postgres so data is stored permanently.
+# Otherwise it falls back to the local database.db SQLite file.
+
+DATABASE_URL = os.environ.get('DATABASE_URL', '').strip()
+USE_POSTGRES = bool(DATABASE_URL)
+
+if USE_POSTGRES:
+    import psycopg2
+    import psycopg2.extras
+
+
+class _Cursor:
+    """Thin wrapper so `.execute(sql, params).fetchone()/.fetchall()` keeps
+    working exactly like sqlite3, while translating `?` placeholders to `%s`
+    for psycopg2. Rows behave like dicts in both backends."""
+
+    def __init__(self, cur, is_pg):
+        self._cur = cur
+        self._is_pg = is_pg
+
+    def execute(self, sql, params=()):
+        if self._is_pg:
+            sql = sql.replace('?', '%s')
+        self._cur.execute(sql, params)
+        return self
+
+    def fetchone(self):
+        return self._cur.fetchone()
+
+    def fetchall(self):
+        return self._cur.fetchall()
+
+
+class _Conn:
+    """Connection wrapper that mirrors the small subset of the sqlite3
+    Connection API used across the app (execute / cursor / commit / close)."""
+
+    def __init__(self):
+        if USE_POSTGRES:
+            self._conn = psycopg2.connect(DATABASE_URL)
+            self._is_pg = True
+        else:
+            self._conn = sqlite3.connect('database.db')
+            self._conn.row_factory = sqlite3.Row
+            self._is_pg = False
+
+    def cursor(self):
+        if self._is_pg:
+            cur = self._conn.cursor(cursor_factory=psycopg2.extras.RealDictCursor)
+        else:
+            cur = self._conn.cursor()
+        return _Cursor(cur, self._is_pg)
+
+    def execute(self, sql, params=()):
+        return self.cursor().execute(sql, params)
+
+    def commit(self):
+        self._conn.commit()
+
+    def close(self):
+        self._conn.close()
+
+
 def get_db():
-    """Get a database connection with Row factory for dict-like access."""
-    conn = sqlite3.connect('database.db')
-    conn.row_factory = sqlite3.Row
-    return conn
+    """Get a database connection with dict-like row access."""
+    return _Conn()
 
 
 def init_db():
@@ -94,6 +161,74 @@ def init_db():
     conn = get_db()
     c = conn.cursor()
 
+    if USE_POSTGRES:
+        # ----- PostgreSQL schema -----
+        c.execute('''CREATE TABLE IF NOT EXISTS users (
+            id SERIAL PRIMARY KEY,
+            name TEXT NOT NULL,
+            email TEXT UNIQUE NOT NULL,
+            password TEXT NOT NULL,
+            role TEXT DEFAULT 'student',
+            department TEXT DEFAULT '',
+            batch TEXT DEFAULT '',
+            college_name TEXT DEFAULT ''
+        )''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS events (
+            event_id SERIAL PRIMARY KEY,
+            event_name TEXT NOT NULL,
+            description TEXT,
+            date TEXT,
+            time TEXT,
+            venue TEXT,
+            poster TEXT,
+            limit_enabled INTEGER DEFAULT 0,
+            max_participants INTEGER,
+            is_paid INTEGER DEFAULT 0,
+            price INTEGER,
+            upi_id TEXT,
+            payment_qr TEXT,
+            is_team_event INTEGER DEFAULT 0,
+            team_size INTEGER DEFAULT 1
+        )''')
+
+        c.execute('''CREATE TABLE IF NOT EXISTS registrations (
+            reg_id SERIAL PRIMARY KEY,
+            user_id INTEGER NOT NULL,
+            event_id INTEGER NOT NULL,
+            payment_status TEXT DEFAULT 'pending',
+            transaction_id TEXT DEFAULT '',
+            team_name TEXT DEFAULT '',
+            team_members TEXT DEFAULT '',
+            FOREIGN KEY (user_id) REFERENCES users(id),
+            FOREIGN KEY (event_id) REFERENCES events(event_id)
+        )''')
+
+        # Idempotent column adds (Postgres supports IF NOT EXISTS)
+        for stmt in [
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS department TEXT DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS batch TEXT DEFAULT ''",
+            "ALTER TABLE users ADD COLUMN IF NOT EXISTS college_name TEXT DEFAULT ''",
+            "ALTER TABLE events ADD COLUMN IF NOT EXISTS is_team_event INTEGER DEFAULT 0",
+            "ALTER TABLE events ADD COLUMN IF NOT EXISTS team_size INTEGER DEFAULT 1",
+            "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS transaction_id TEXT DEFAULT ''",
+            "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS team_name TEXT DEFAULT ''",
+            "ALTER TABLE registrations ADD COLUMN IF NOT EXISTS team_members TEXT DEFAULT ''",
+        ]:
+            c.execute(stmt)
+
+        c.execute('''CREATE TABLE IF NOT EXISTS password_resets (
+            id SERIAL PRIMARY KEY,
+            email TEXT NOT NULL,
+            token TEXT NOT NULL,
+            expiry_time TEXT NOT NULL
+        )''')
+
+        conn.commit()
+        conn.close()
+        return
+
+    # ----- SQLite schema (local) -----
     # Users table – stores students and admins
     c.execute('''CREATE TABLE IF NOT EXISTS users (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -222,8 +357,73 @@ def send_email(to, subject, body):
         return False
 
 
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# File storage layer (local static/images  OR  Supabase Storage)
+# ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+# On a normal server we save uploaded images to static/images.
+# On serverless hosts (Vercel) the filesystem is read-only, so when the
+# SUPABASE_* env vars are set we upload to a public Supabase Storage bucket
+# and store the public URL in the database instead of a bare filename.
+
+SUPABASE_URL = os.environ.get('SUPABASE_URL', '').strip().rstrip('/')
+SUPABASE_SERVICE_KEY = os.environ.get('SUPABASE_SERVICE_KEY', '').strip()
+SUPABASE_BUCKET = os.environ.get('SUPABASE_BUCKET', 'uploads').strip()
+USE_SUPABASE_STORAGE = bool(SUPABASE_URL and SUPABASE_SERVICE_KEY)
+
+
+def _storage_public_url(path):
+    """Public URL for an object in the Supabase Storage bucket."""
+    return f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_BUCKET}/{path}"
+
+
+def _storage_upload(data, path, content_type):
+    """Upload raw bytes to Supabase Storage and return the public URL."""
+    url = f"{SUPABASE_URL}/storage/v1/object/{SUPABASE_BUCKET}/{path}"
+    resp = requests.post(
+        url,
+        data=data,
+        headers={
+            'Authorization': f'Bearer {SUPABASE_SERVICE_KEY}',
+            'Content-Type': content_type,
+            'x-upsert': 'true',
+        },
+        timeout=30,
+    )
+    resp.raise_for_status()
+    return _storage_public_url(path)
+
+
+def save_upload(file_storage):
+    """Save an uploaded image and return the value to store in the DB.
+
+    Returns a full public URL when Supabase Storage is configured (Vercel),
+    otherwise a bare filename saved under static/images (local dev)."""
+    name = secure_filename(f"{uuid.uuid4().hex}_{file_storage.filename}")
+    if USE_SUPABASE_STORAGE:
+        content_type = file_storage.mimetype or 'application/octet-stream'
+        return _storage_upload(file_storage.read(), name, content_type)
+    file_storage.save(os.path.join(app.config['UPLOAD_FOLDER'], name))
+    return name
+
+
+@app.context_processor
+def inject_media_url():
+    """Make media_url() available in all templates. Renders a stored image
+    value: a full URL (Supabase) is used as-is; a bare filename falls back to
+    the local static/images folder."""
+    def media_url(value):
+        if not value:
+            return ''
+        if value.startswith('http://') or value.startswith('https://'):
+            return value
+        return url_for('static', filename='images/' + value)
+    return dict(media_url=media_url)
+
+
 def generate_upi_qr(upi_id, payee_name, amount, event_id):
-    """Auto-generate a UPI QR code image from UPI ID and save to static/images."""
+    """Auto-generate a UPI QR code image from a UPI ID.
+
+    Returns a public URL (Supabase Storage) or a bare filename (local)."""
     # UPI deep link format
     upi_url = f"upi://pay?pa={upi_id}&pn={payee_name}&am={amount}&cu=INR&tn=Event_Registration_{event_id}"
 
@@ -238,11 +438,15 @@ def generate_upi_qr(upi_id, payee_name, amount, event_id):
     qr.make(fit=True)
 
     img = qr.make_image(fill_color="#1e293b", back_color="white").convert('RGB')
-
-    # Save to static/images
     filename = f"upi_qr_{event_id}_{uuid.uuid4().hex[:8]}.png"
-    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
-    img.save(filepath)
+
+    if USE_SUPABASE_STORAGE:
+        buf = BytesIO()
+        img.save(buf, format='PNG')
+        return _storage_upload(buf.getvalue(), filename, 'image/png')
+
+    # Save to static/images (local dev)
+    img.save(os.path.join(app.config['UPLOAD_FOLDER'], filename))
     return filename
 
 
@@ -693,16 +897,14 @@ def add_event():
         if 'poster' in request.files:
             poster = request.files['poster']
             if poster and poster.filename and allowed_file(poster.filename):
-                poster_filename = secure_filename(f"{uuid.uuid4().hex}_{poster.filename}")
-                poster.save(os.path.join(app.config['UPLOAD_FOLDER'], poster_filename))
+                poster_filename = save_upload(poster)
 
         # Handle payment QR image upload
         qr_filename = None
         if 'payment_qr' in request.files:
             qr = request.files['payment_qr']
             if qr and qr.filename and allowed_file(qr.filename):
-                qr_filename = secure_filename(f"{uuid.uuid4().hex}_{qr.filename}")
-                qr.save(os.path.join(app.config['UPLOAD_FOLDER'], qr_filename))
+                qr_filename = save_upload(qr)
 
         conn = get_db()
         conn.execute('''INSERT INTO events
@@ -755,15 +957,13 @@ def edit_event(event_id):
         if 'poster' in request.files:
             poster = request.files['poster']
             if poster and poster.filename and allowed_file(poster.filename):
-                poster_filename = secure_filename(f"{uuid.uuid4().hex}_{poster.filename}")
-                poster.save(os.path.join(app.config['UPLOAD_FOLDER'], poster_filename))
+                poster_filename = save_upload(poster)
 
         qr_filename = request.form.get('existing_qr', '')
         if 'payment_qr' in request.files:
             qr = request.files['payment_qr']
             if qr and qr.filename and allowed_file(qr.filename):
-                qr_filename = secure_filename(f"{uuid.uuid4().hex}_{qr.filename}")
-                qr.save(os.path.join(app.config['UPLOAD_FOLDER'], qr_filename))
+                qr_filename = save_upload(qr)
 
         conn.execute('''UPDATE events SET
             event_name=?, description=?, date=?, time=?, venue=?, poster=?,
@@ -1204,11 +1404,18 @@ def too_large(e):
 # Application Entry Point
 # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
+# Initialize database tables at import time so it works under gunicorn and
+# serverless hosts (Vercel) too, not only when run directly. CREATE TABLE
+# IF NOT EXISTS is idempotent, so running it on each cold start is safe.
+try:
+    init_db()
+except Exception as e:
+    print(f"[!] init_db() at startup failed: {e}")
+
+
 if __name__ == '__main__':
     # Ensure upload directory exists
     os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
-    # Initialize database tables
-    init_db()
     print("=== Smart College Event Management System ===")
     print("    Running at http://127.0.0.1:5000")
     app.run(debug=True, port=5000)

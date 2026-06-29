@@ -21,7 +21,7 @@
                 <div class="manage-card fade-in">
                     <!-- Event Image -->
                     {% if event.poster %}
-                        <img src="{{ url_for('static', filename='images/' + event.poster) }}"
+                        <img src="{{ media_url(event.poster) }}"
                              alt="{{ event.event_name }}" class="manage-card-image">
                     {% else %}
                         <div class="manage-card-image default">🎪</div>
